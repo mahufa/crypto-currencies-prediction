@@ -1,0 +1,32 @@
+from sqlalchemy import Table, Column, Integer, Float, String, ForeignKey, UniqueConstraint, MetaData
+
+metadata = MetaData()
+
+# tables
+coins = Table('coin', metadata,
+              Column('id', String(50), primary_key=True),
+              Column('symbol', String(10), unique=True),
+              Column('name', String(50), unique=True))
+
+currencies = Table('currency', metadata,
+                   Column('symbol', String(5), primary_key=True))
+
+timestamps = Table('timestamps', metadata,
+                   Column('id', Integer, primary_key=True, autoincrement=True),
+                   Column('coin_id', String(50), ForeignKey('coin.id')),
+                   Column('currency_symbol', String(5), ForeignKey('currency.symbol')),
+                   Column('timestamp', Integer),
+                   UniqueConstraint('coin_id', 'currency_symbol', 'timestamp', name='uq_timestamp_entry'))
+
+ohlc_data = Table('ohlc_data', metadata,
+                  Column('timestamp_id', Integer, ForeignKey('timestamp.id'), primary_key=True),
+                  Column('open', Float),
+                  Column('high', Float),
+                  Column('low', Float),
+                  Column('close', Float))
+
+historical_data = Table('historical_data', metadata,
+                        Column('timestamp_id', Integer, ForeignKey('timestamp.id'), primary_key=True),
+                        Column('total_volume', Integer),
+                        Column('market_caps', Integer),
+                        Column('price', Float))

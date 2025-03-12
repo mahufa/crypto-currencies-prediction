@@ -1,7 +1,7 @@
 import pandas as pd
 import requests
 
-from db_manager import QuantDataCache
+from cache import QuantDataCache
 
 
 def fetch_data(url, params=None):
