@@ -1,4 +1,4 @@
-from datetime import datetime
+import inspect
 
 import pandas as pd
 
@@ -7,117 +7,104 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from db_manager import DatabaseManager
 from db_schema import metadata, timestamps
+from quant_data_frame import QuantDataFrame
 
 
 class QuantDataCache:
     """Caches quantitative data from an API into the database after checking the latest timestamp."""
-    __last_timestamps: dict = {}
 
     def __init__(self, table_name : str):
-        self.__table_name = table_name
+        self._table = metadata.tables.get(table_name)
+
+        if self._table is None:
+            raise ValueError(f"Table {table_name} does not exist in metadata.")
+        if 'timestamp_id' not in self._table.c:
+            raise ValueError(f"Column 'timestamp_id' does not exist in table {table_name}.")
+
+        self._table_name = table_name
 
     def __call__(self, f):
         """Decorator that fetches, processes, and stores new data before returning it."""
         def wrapper(*args, **kwargs):
-            coin_id = kwargs.get('coin_id')
-            currency_symbol = kwargs.get('currency_symbol')
-            if coin_id is None or currency_symbol is None:
-                raise ValueError("Both 'coin_id' and 'currency_symbol' must be provided.")
+            sig = inspect.signature(f)
+            bound_args = sig.bind_partial(*args, **kwargs)
+            bound_args.apply_defaults()
+
+            coin_id = bound_args.arguments.get('coin_id')
+            if coin_id is None:
+                raise ValueError("'coin_id' must be provided.")
+            currency_symbol = bound_args.arguments.get('currency_symbol')
 
             with DatabaseManager().get_connection() as con:
+                local_data = self.get_local(con, coin_id, currency_symbol)
 
-                if self.__last_timestamps.get(self.__table_name) is None:
-                    self.__last_timestamps[self.__table_name] = self.last_timestamp(con)
+                if not local_data.empty:
+                    kwargs['starting_timestamp'] = local_data['timestamp'].max()
 
-                days = self.days_to_query(self.__last_timestamps[self.__table_name])
+                new_data = f(*args, **kwargs)
+                if new_data.empty:
+                    return local_data
 
-                new_data = f(*args, **kwargs, days=days)
+                try:
+                    self.to_ts_table(con, new_data)
+                    ts_with_ids = self.get_ts_ids(con, new_data)
+                    self.to_quant_data_table(con, new_data, ts_with_ids)
+                    con.commit()
 
-                self.insert_data(con, api_data=new_data, coin_id=coin_id, currency_symbol=currency_symbol)
+                except SQLAlchemyError as e:
+                    con.rollback()
+                    raise SQLAlchemyError(f"Failed to insert new data into {self._table_name}: {e}.")
 
-                return pd.read_sql(self.__table_name, con)
+                return pd.concat([local_data, new_data])
 
         return wrapper
 
-    def last_timestamp(self, connection):
-        """Returns the latest timestamp in the specified table.
+    def get_local(self, connection, coin_id: str, currency_symbol: str):
+        joined = timestamps.join(self._table, timestamps.c.id == self._table.c.timestamp_id)
+        query = (select(timestamps.c.timestamp, *[col for col in self._table.c if col.name != 'timestamp_id'])
+                 .select_from(joined)
+                 .where(timestamps.c.coin_id == coin_id)
+                 .where(timestamps.c.currency_symbol == currency_symbol))
 
-        If no timestamp is found, returns None.
-        Raises a ValueError if the table does not exist in the metadata or if it lacks a 'timestamp_id' column.
-        """
-        table = metadata.tables.get(self.__table_name)
+        return QuantDataFrame(connection.execute(query).fetchall(), coin_id, currency_symbol)
 
-        if table is None:
-            raise ValueError(f"Table {self.__table_name} does not exist in metadata.")
+    def to_ts_table(self, connection, new_data: QuantDataFrame):
+        """Inserts data into timestamps table."""
+        coin_id = new_data.get_coin_id()
+        currency_symbol = new_data.get_currency_symbol()
 
-        if 'timestamp_id' not in table.c:
-            raise ValueError(f"Column 'timestamp_id' does not exist in table {self.__table_name}.")
+        query = (select(timestamps.c.timestamp).
+                 where(timestamps.c.coin_id == coin_id).
+                 where(timestamps.c.currency_symbol == currency_symbol).
+                 where(timestamps.c.timestamp >= new_data['timestamp'].min()))
 
-        joined = timestamps.join(table, timestamps.c.id == table.c.timestamp_id)
-        query = select(func.max(timestamps.c.timestamp)).select_from(joined)
+        locally_stored_ts = pd.Series([row[0] for row in connection.execute(query).fetchall()])
 
-        return connection.execute(query).scalar()
+        df_to_insert = new_data.loc[~new_data['timestamp'].isin(locally_stored_ts), ['timestamp']].copy()
+        df_to_insert['coin_id'] = coin_id
+        df_to_insert['currency_symbol'] = currency_symbol
 
-    @staticmethod
-    def days_to_query(last_timestamp):
-        """Returns the number of days since the last recorded timestamp.
-
-        If no timestamp is found, defaults to 365 days.
-        """
-        if last_timestamp is None:
-            return 365
-
-        date = datetime.fromtimestamp(last_timestamp).date()
-        return (datetime.now().date() - date).days
+        df_to_insert.to_sql('timestamps', connection, if_exists='append', index=False)
 
     @staticmethod
-    def create_timestamp_input_df(timestamps_col: pd.Series, *, coin_id: str, currency_symbol: str):
-        """Creates a DataFrame formatted for insertion into the 'timestamps' table."""
-        res_df = pd.DataFrame()
-        res_df['timestamp'] = timestamps_col
-        res_df['coin_id'] = coin_id
-        res_df['currency_symbol'] = currency_symbol
-        return res_df
+    def get_ts_ids(connection, new_data: QuantDataFrame):
+        """Fetches filtered timestamps and their corresponding IDs as a DataFrame."""
+        coin_id = new_data.get_coin_id()
+        currency_symbol = new_data.get_currency_symbol()
 
-    @staticmethod
-    def timestamps_with_ids(connection, *, coin_id: str, currency_symbol: str, row_num: int):
-        """Fetches the latest timestamps and their corresponding IDs as a DataFrame."""
-        query = select([timestamps.c.id, timestamps.c.timestamp]). \
-            where(timestamps.c.coin_id == coin_id). \
-            where(timestamps.c.currency_symbol == currency_symbol). \
-            order_by(timestamps.c.timestamp.desc()). \
-            limit(row_num)
+        query = (select(timestamps.c.id, timestamps.c.timestamp).
+                 where(timestamps.c.coin_id == coin_id).
+                 where(timestamps.c.currency_symbol == currency_symbol).
+                 where(timestamps.c.timestamp.in_(new_data['timestamp'].tolist())))
 
-        return pd.DataFrame(connection.execute(query).fetchall(), columns=['timestamp_id', 'timestamp'])
+        return QuantDataFrame(connection.execute(query).fetchall(), coin_id, currency_symbol)
 
-    @staticmethod
-    def merge_timestamp_ids_into_data(*, api_data: pd.DataFrame, timestamps_with_ids: pd.DataFrame):
-        """Merges API data with timestamp IDs for insertion into the appropriate table."""
-        res = api_data.merge(timestamps_with_ids, on='timestamp', how='left')
-        res.drop(columns=['timestamp'], inplace=True)
-        return res
+    def to_quant_data_table(self, connection, new_data: QuantDataFrame, ts_with_ids: QuantDataFrame):
+        """Merges new data with ids from the timestamp table and inserts into the appropriate table."""
+        df_to_insert = new_data.merge(ts_with_ids, on='timestamp', how='left').copy()
+        df_to_insert.drop(columns=['timestamp'], inplace=True)
+        df_to_insert.rename(columns={'id': 'timestamp_id'}, inplace=True)
 
-    def insert_data(self, connection, *, api_data: pd.DataFrame, coin_id: str, currency_symbol: str):
-        """Inserts data into the appropriate table.
 
-        If an error occurs, performs a rollback and raises an SQLAlchemyError.
-        """
-        ts_input = self.create_timestamp_input_df(api_data['timestamp'],
-                                                  coin_id=coin_id, currency_symbol=currency_symbol, )
-
-        try:
-            ts_input.to_sql("timestamps", con=connection, if_exists='append',
-                            index=False, method='multi', chunksize=1000)
-
-            ts_with_ids = self.timestamps_with_ids(connection, coin_id=coin_id,
-                                                   currency_symbol=currency_symbol, row_num=len(ts_input))
-
-            prepared_input = self.merge_timestamp_ids_into_data(api_data=api_data, timestamps_with_ids=ts_with_ids)
-            prepared_input.to_sql(self.__table_name, con=connection, if_exists='append',
+        df_to_insert.to_sql(self._table_name, con=connection, if_exists='append',
                                   index=False, method='multi', chunksize=1000)
-
-            connection.commit()
-
-        except SQLAlchemyError as e:
-            connection.rollback()
-            raise SQLAlchemyError(f"Connection error when inserting data into table {self.__table_name}: {e}")

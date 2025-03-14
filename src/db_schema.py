@@ -19,14 +19,14 @@ timestamps = Table('timestamps', metadata,
                    UniqueConstraint('coin_id', 'currency_symbol', 'timestamp', name='uq_timestamp_entry'))
 
 ohlc_data = Table('ohlc_data', metadata,
-                  Column('timestamp_id', Integer, ForeignKey('timestamp.id'), primary_key=True),
+                  Column('timestamp_id', Integer, ForeignKey('timestamps.id'), primary_key=True),
                   Column('open', Float),
                   Column('high', Float),
                   Column('low', Float),
                   Column('close', Float))
 
 historical_data = Table('historical_data', metadata,
-                        Column('timestamp_id', Integer, ForeignKey('timestamp.id'), primary_key=True),
+                        Column('timestamp_id', Integer, ForeignKey('timestamps.id'), primary_key=True),
                         Column('total_volume', Integer),
-                        Column('market_caps', Integer),
+                        Column('market_cap', Integer),
                         Column('price', Float))
