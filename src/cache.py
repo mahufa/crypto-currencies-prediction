@@ -1,8 +1,9 @@
 import inspect
+from datetime import datetime, timedelta
 
 import pandas as pd
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from db_manager import DatabaseManager
@@ -11,7 +12,9 @@ from quant_data_frame import QuantDataFrame
 
 
 class QuantDataCache:
-    """Caches quantitative data from an API into the database after checking the latest timestamp."""
+    """Caches quantitative data from an API into the database after checking the latest timestamp.
+
+    Skips API call if the latest timestamp is more than 5 minutes old."""
 
     def __init__(self, table_name : str):
         self._table = metadata.tables.get(table_name)
@@ -39,7 +42,12 @@ class QuantDataCache:
                 local_data = self.get_local(con, coin_id, currency_symbol)
 
                 if not local_data.empty:
-                    kwargs['starting_timestamp'] = local_data['timestamp'].max()
+                    lt = local_data['timestamp'].max()
+
+                    if lt > (datetime.now() - timedelta(minutes=5)).timestamp():
+                        return local_data
+
+                    kwargs['starting_timestamp'] = lt
 
                 new_data = f(*args, **kwargs)
                 if new_data.empty:
@@ -68,23 +76,18 @@ class QuantDataCache:
 
         return QuantDataFrame(connection.execute(query).fetchall(), coin_id, currency_symbol)
 
-    def to_ts_table(self, connection, new_data: QuantDataFrame):
+    @staticmethod
+    def to_ts_table(connection, new_data: QuantDataFrame):
         """Inserts data into timestamps table."""
         coin_id = new_data.get_coin_id()
         currency_symbol = new_data.get_currency_symbol()
 
-        query = (select(timestamps.c.timestamp).
-                 where(timestamps.c.coin_id == coin_id).
-                 where(timestamps.c.currency_symbol == currency_symbol).
-                 where(timestamps.c.timestamp >= new_data['timestamp'].min()))
-
-        locally_stored_ts = pd.Series([row[0] for row in connection.execute(query).fetchall()])
-
-        df_to_insert = new_data.loc[~new_data['timestamp'].isin(locally_stored_ts), ['timestamp']].copy()
+        df_to_insert = pd.DataFrame()
+        df_to_insert['timestamp'] = new_data['timestamp']
         df_to_insert['coin_id'] = coin_id
         df_to_insert['currency_symbol'] = currency_symbol
-
-        df_to_insert.to_sql('timestamps', connection, if_exists='append', index=False)
+        stmt = timestamps.insert().prefix_with("OR IGNORE")
+        connection.execute(stmt, df_to_insert.to_dict(orient="records"))
 
     @staticmethod
     def get_ts_ids(connection, new_data: QuantDataFrame):
