@@ -3,12 +3,12 @@ from sqlalchemy import Table, Column, Integer, Float, String, ForeignKey, Unique
 metadata = MetaData()
 
 # tables
-coins = Table('coin', metadata,
+coins = Table('coins', metadata,
               Column('id', String(50), primary_key=True),
               Column('symbol', String(10), unique=True),
               Column('name', String(50), unique=True))
 
-currencies = Table('currency', metadata,
+currencies = Table('currencies', metadata,
                    Column('symbol', String(5), primary_key=True))
 
 timestamps = Table('timestamps', metadata,
@@ -30,3 +30,13 @@ historical_data = Table('historical_data', metadata,
                         Column('total_volume', Integer),
                         Column('market_cap', Integer),
                         Column('price', Float))
+
+staging = Table('staging', metadata,
+                Column('timestamp', Integer, primary_key=True),
+                Column('open', Float, nullable=True),
+                Column('high', Float, nullable=True),
+                Column('low', Float, nullable=True),
+                Column('close', Float, nullable=True),
+                Column('total_volume', Integer, nullable=True),
+                Column('market_cap', Integer, nullable=True),
+                Column('price', Float, nullable=True))
