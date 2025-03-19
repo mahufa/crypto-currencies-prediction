@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from db_manager import DatabaseManager
-from db_schema import metadata, timestamps
+from db_schema import metadata, timestamps, staging
 from quant_data_frame import QuantDataFrame
 
 
@@ -25,6 +25,7 @@ class QuantDataCache:
             raise ValueError(f"Column 'timestamp_id' does not exist in table {table_name}.")
 
         self._table_name = table_name
+        self._last_call_ts = None
 
     def __call__(self, f):
         """Decorator that fetches, processes, and stores new data before returning it."""
@@ -42,12 +43,12 @@ class QuantDataCache:
                 local_data = self.get_local(con, coin_id, currency_symbol)
 
                 if not local_data.empty:
-                    lt = local_data['timestamp'].max()
+                    self._last_call_ts = self._last_call_ts or local_data['timestamp'].max()
 
-                    if lt > (datetime.now() - timedelta(minutes=5)).timestamp():
+                    if self._last_call_ts > (datetime.now() - timedelta(minutes=5)).timestamp():
                         return local_data
 
-                    kwargs['starting_timestamp'] = lt
+                    kwargs['starting_timestamp'] = self._last_call_ts
 
                 new_data = f(*args, **kwargs)
                 if new_data.empty:
@@ -55,8 +56,7 @@ class QuantDataCache:
 
                 try:
                     self.to_ts_table(con, new_data)
-                    ts_with_ids = self.get_ts_ids(con, new_data)
-                    self.to_quant_data_table(con, new_data, ts_with_ids)
+                    self.to_quant_data_table(con, new_data)
                     con.commit()
 
                 except SQLAlchemyError as e:
@@ -86,28 +86,21 @@ class QuantDataCache:
         df_to_insert['timestamp'] = new_data['timestamp']
         df_to_insert['coin_id'] = coin_id
         df_to_insert['currency_symbol'] = currency_symbol
-        stmt = timestamps.insert().prefix_with("OR IGNORE")
-        connection.execute(stmt, df_to_insert.to_dict(orient="records"))
+        stmt = timestamps.insert().prefix_with('OR IGNORE')
 
-    @staticmethod
-    def get_ts_ids(connection, new_data: QuantDataFrame):
-        """Fetches filtered timestamps and their corresponding IDs as a DataFrame."""
-        coin_id = new_data.get_coin_id()
-        currency_symbol = new_data.get_currency_symbol()
+        connection.execute(stmt, df_to_insert.to_dict(orient='records'))
 
-        query = (select(timestamps.c.id, timestamps.c.timestamp).
-                 where(timestamps.c.coin_id == coin_id).
-                 where(timestamps.c.currency_symbol == currency_symbol).
-                 where(timestamps.c.timestamp.in_(new_data['timestamp'].tolist())))
-
-        return QuantDataFrame(connection.execute(query).fetchall(), coin_id, currency_symbol)
-
-    def to_quant_data_table(self, connection, new_data: QuantDataFrame, ts_with_ids: QuantDataFrame):
+    def to_quant_data_table(self, connection, new_data: QuantDataFrame):
         """Merges new data with ids from the timestamp table and inserts into the appropriate table."""
-        df_to_insert = new_data.merge(ts_with_ids, on='timestamp', how='left').copy()
-        df_to_insert.drop(columns=['timestamp'], inplace=True)
-        df_to_insert.rename(columns={'id': 'timestamp_id'}, inplace=True)
+        stmt = staging.insert().prefix_with('OR REPLACE')
+        connection.execute(stmt, new_data.to_dict(orient='records'))
 
+        sel_to_insert = (select(timestamps.c.id,
+                                *[col for col in staging.c if col.name in map(lambda c: c.name, self._table.c)]).
+                         select_from(timestamps.join(staging, timestamps.c.timestamp == staging.c.timestamp)))
 
-        df_to_insert.to_sql(self._table_name, con=connection, if_exists='append',
-                                  index=False, method='multi', chunksize=1000)
+        stmt = (self._table.insert().prefix_with('OR REPLACE').
+                from_select(names=[col for col in self._table.c], select=sel_to_insert))
+
+        connection.execute(stmt)
+        connection.execute(staging.delete())
