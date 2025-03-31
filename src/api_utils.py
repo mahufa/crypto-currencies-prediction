@@ -100,5 +100,5 @@ def get_ohlc_data(*, coin_id='bitcoin', currency_symbol="usd", starting_timestam
             df.columns = ['timestamp', 'open', 'high', 'low', 'close']
 
             return df
-
-    return QuantDataFrame(None, coin_id, currency_symbol)
+        else:
+            return QuantDataFrame(None, coin_id, currency_symbol)

@@ -13,8 +13,8 @@ currencies = Table('currencies', metadata,
 
 timestamps = Table('timestamps', metadata,
                    Column('id', Integer, primary_key=True, autoincrement=True),
-                   Column('coin_id', String(50), ForeignKey('coin.id')),
-                   Column('currency_symbol', String(5), ForeignKey('currency.symbol')),
+                   Column('coin_id', String(50), ForeignKey('coins.id')),
+                   Column('currency_symbol', String(5), ForeignKey('currencies.symbol')),
                    Column('timestamp', Integer),
                    UniqueConstraint('coin_id', 'currency_symbol', 'timestamp', name='uq_timestamp_entry'))
 
