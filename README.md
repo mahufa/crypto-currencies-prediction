@@ -1,6 +1,6 @@
-# crypto_currency_prediction
+# crypto_currency_visualization
 
-This project aimed at predicting cryptocurrency prices. 
+This project aimed at visualizing crypto currencies data. 
 
 ---
 ### Current prerequisites
@@ -16,10 +16,8 @@ This project uses an **Anaconda** environment to manage dependencies.
 
 At this stage, the project focuses on collecting data from the CoinGecko API and storing it in the database. 
 Future steps planned include:
-1. Data processing and building predictive models.
-2. Visualization of data and model outputs.
-3. Performance optimization.
-
+1. Visualization of data and outputs.
+2. Performance optimization.
 
 ---
 
