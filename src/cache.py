@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from db_manager import DatabaseManager
 from db_schema import metadata, timestamps, staging
-from quant_data_frame import QuantDataFrame
+from frames import TimeSeriesFrame
 
 
 class QuantDataCache:
@@ -43,7 +43,7 @@ class QuantDataCache:
                 local_data = self.get_local(con, coin_id, currency_symbol)
 
                 if not local_data.empty:
-                    self._last_call_ts = self._last_call_ts or local_data['timestamp'].max()
+                    self._last_call_ts = self._last_call_ts or local_data.index.max()
 
                     if self._last_call_ts > (datetime.now() - timedelta(minutes=5)).timestamp():
                         return local_data
@@ -74,23 +74,23 @@ class QuantDataCache:
                  .where(timestamps.c.coin_id == coin_id)
                  .where(timestamps.c.currency_symbol == currency_symbol))
 
-        return QuantDataFrame(connection.execute(query).fetchall(), coin_id, currency_symbol)
+        return TimeSeriesFrame(connection.execute(query).fetchall(), coin_id, currency_symbol)
 
     @staticmethod
-    def to_ts_table(connection, new_data: QuantDataFrame):
+    def to_ts_table(connection, new_data: TimeSeriesFrame):
         """Inserts data into timestamps table."""
         coin_id = new_data.get_coin_id()
         currency_symbol = new_data.get_currency_symbol()
 
         df_to_insert = pd.DataFrame()
-        df_to_insert['timestamp'] = new_data['timestamp']
+        df_to_insert['timestamp'] = new_data.index
         df_to_insert['coin_id'] = coin_id
         df_to_insert['currency_symbol'] = currency_symbol
         stmt = timestamps.insert().prefix_with('OR IGNORE')
 
         connection.execute(stmt, df_to_insert.to_dict(orient='records'))
 
-    def to_quant_data_table(self, connection, new_data: QuantDataFrame):
+    def to_quant_data_table(self, connection, new_data: TimeSeriesFrame):
         """Merges new data with ids from the timestamp table and inserts into the appropriate table."""
         stmt = staging.insert().prefix_with('OR REPLACE')
         connection.execute(stmt, new_data.to_dict(orient='records'))

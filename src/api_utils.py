@@ -4,7 +4,7 @@ import pandas as pd
 import requests
 
 from cache import QuantDataCache
-from quant_data_frame import QuantDataFrame
+from frames import TimeSeriesFrame
 
 PRECISION = 2
 
@@ -65,9 +65,9 @@ def get_historical_data(*, coin_id='bitcoin', currency_symbol='usd', starting_ti
     data = _fetch_data(url, params)
 
     if not data:
-        return QuantDataFrame(None, coin_id, currency_symbol)
+        return TimeSeriesFrame(None, coin_id, currency_symbol)
 
-    return QuantDataFrame({
+    return TimeSeriesFrame({
         'timestamp': [ts for ts, _ in data['prices']],
         'price': [price for _, price in data['prices']],
         'market_cap': [cap for _, cap in data['market_caps']],
@@ -95,10 +95,15 @@ def get_ohlc_data(*, coin_id='bitcoin', currency_symbol="usd", starting_timestam
                   "days": days}
         data = _fetch_data(url, params)
 
-        if data:
-            df = QuantDataFrame(data, coin_id, currency_symbol)
-            df.columns = ['timestamp', 'open', 'high', 'low', 'close']
+        if not data:
+            return TimeSeriesFrame(None, coin_id, currency_symbol)
 
-            return df
-        else:
-            return QuantDataFrame(None, coin_id, currency_symbol)
+        timestamps, opens, highs, lows, closes = zip(*data)
+        return TimeSeriesFrame({
+            'timestamp': timestamps,
+            'open':     opens,
+            'high':     highs,
+            'low':      lows,
+            'close':    closes},
+            coin_id,
+            currency_symbol)
