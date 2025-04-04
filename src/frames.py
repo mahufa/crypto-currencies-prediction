@@ -1,9 +1,11 @@
+from datetime import datetime
+
 import pandas as pd
 
 
 class TimeSeriesFrame(pd.DataFrame):
     """Wrapper over pandas.DataFrame containing coin_id and currency_symbol.
-    The constructor extracts timestamp from the given data and sets it as the index.
+    The constructor creates datetime from timestamp from the given data and sets it as the index.
 
     Returns an empty frame with coin_id and currency_symbol if the given data is None.
 
@@ -14,9 +16,8 @@ class TimeSeriesFrame(pd.DataFrame):
         elif 'timestamp' not in data:
             raise ValueError("Data should contain timestamp.")
         else:
-            ts_column = data.pop('timestamp')
-            super().__init__(data, index=ts_column)
-            self.index.name = 'timestamp'
+            super().__init__(data, index=[datetime.fromtimestamp(ts/1000) for ts in data['timestamp']])
+            self.index.name = 'datetime'
 
         self._coin_id = coin_id
         self._currency_symbol = currency_symbol

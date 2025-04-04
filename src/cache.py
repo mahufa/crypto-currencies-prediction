@@ -43,7 +43,7 @@ class QuantDataCache:
                 local_data = self.get_local(con, coin_id, currency_symbol)
 
                 if not local_data.empty:
-                    self._last_call_ts = self._last_call_ts or local_data.index.max()
+                    self._last_call_ts = self._last_call_ts or local_data.timestamp.max()
 
                     if self._last_call_ts > (datetime.now() - timedelta(minutes=5)).timestamp():
                         return local_data
@@ -74,7 +74,14 @@ class QuantDataCache:
                  .where(timestamps.c.coin_id == coin_id)
                  .where(timestamps.c.currency_symbol == currency_symbol))
 
-        return TimeSeriesFrame(connection.execute(query).fetchall(), coin_id, currency_symbol)
+        result = connection.execute(query)
+
+        col_names = result.keys()
+        columns =  zip(*result.fetchall())
+
+        loc = {col_name: column for col_name, column in zip(col_names, columns)}
+
+        return TimeSeriesFrame(loc, coin_id, currency_symbol)
 
     @staticmethod
     def to_ts_table(connection, new_data: TimeSeriesFrame):
@@ -83,7 +90,7 @@ class QuantDataCache:
         currency_symbol = new_data.get_currency_symbol()
 
         df_to_insert = pd.DataFrame()
-        df_to_insert['timestamp'] = new_data.index
+        df_to_insert['timestamp'] = new_data.timestamp
         df_to_insert['coin_id'] = coin_id
         df_to_insert['currency_symbol'] = currency_symbol
         stmt = timestamps.insert().prefix_with('OR IGNORE')
