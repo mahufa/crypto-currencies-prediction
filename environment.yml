@@ -1,4 +1,4 @@
-name: crypto_currency_prediction
+name: crypto_currency_visualization
 channels:
   - defaults
   - https://repo.anaconda.com/pkgs/main
@@ -183,4 +183,4 @@ dependencies:
   - zipp=3.21.0=py311hca03da5_0
   - zlib=1.2.13=h18a0788_1
   - zstd=1.5.6=hfb09047_0
-prefix: /opt/anaconda3/envs/crypto_currency_prediction
+prefix: /opt/anaconda3/envs/crypto_currency_visualization
