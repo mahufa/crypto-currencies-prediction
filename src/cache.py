@@ -86,8 +86,8 @@ class QuantDataCache:
     @staticmethod
     def to_ts_table(connection, new_data: TimeSeriesFrame):
         """Inserts data into timestamps table."""
-        coin_id = new_data.get_coin_id()
-        currency_symbol = new_data.get_currency_symbol()
+        coin_id = new_data.coin_id
+        currency_symbol = new_data.currency_symbol
 
         df_to_insert = pd.DataFrame()
         df_to_insert['timestamp'] = new_data.timestamp

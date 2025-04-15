@@ -22,8 +22,10 @@ class TimeSeriesFrame(pd.DataFrame):
         self._coin_id = coin_id
         self._currency_symbol = currency_symbol
 
-    def get_coin_id(self):
+    @property
+    def coin_id(self):
         return self._coin_id
 
-    def get_currency_symbol(self):
+    @property
+    def currency_symbol(self):
         return self._currency_symbol
