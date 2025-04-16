@@ -7,7 +7,7 @@ from cache import QuantDataCache
 from frames import TimeSeriesFrame
 
 PRECISION = 2
-DEFAULT_DAYS = 365
+DEFAULT_DAYS = 30
 DEFAULT_CURRENCY = "usd"
 
 def _fetch_data(url, params=None):
