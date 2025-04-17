@@ -15,6 +15,10 @@ def _fetch_data(url, params=None):
     response.raise_for_status()
     return response.json()
 
+def _days_for_free_api(days):
+    limits = (1, 7, 14, 30, 90, 180)
+    return next((limit for limit in limits if days <= limit), 365)
+
 
 def get_currencies():
     """ Returns Series with all available currencies, else if status code = 4xx or 5xx raises HTTPError. """
@@ -102,22 +106,24 @@ def get_ohlc_data(*, coin_id='bitcoin', currency_symbol=DEFAULT_CURRENCY, starti
         date = datetime.fromtimestamp(starting_timestamp / 1000).date()
         days = (datetime.now().date() - date).days
 
-    if days:
-        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc"
-        params = {"vs_currency": currency_symbol,
-                  "precision": PRECISION,
-                  "days": days}
-        data = _fetch_data(url, params)
+    days = _days_for_free_api(days)
 
-        if not data:
-            return TimeSeriesFrame(None, coin_id, currency_symbol)
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc"
+    params = {"vs_currency": currency_symbol,
+          "precision": PRECISION,
+              "days": days}
+    data = _fetch_data(url, params)
 
-        timestamps, opens, highs, lows, closes = zip(*data)
-        return TimeSeriesFrame({
-            'timestamp': timestamps,
-            'open':     opens,
-            'high':     highs,
-            'low':      lows,
-            'close':    closes},
-            coin_id,
-            currency_symbol)
+    if not data:
+        return TimeSeriesFrame(None, coin_id, currency_symbol)
+
+    timestamps, opens, highs, lows, closes = zip(*data)
+    return TimeSeriesFrame({
+        'timestamp': timestamps,
+        'open':     opens,
+        'high':     highs,
+        'low':      lows,
+        'close':    closes},
+        coin_id,
+        currency_symbol)
+
