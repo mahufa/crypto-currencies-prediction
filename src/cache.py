@@ -8,10 +8,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from db_manager import DatabaseManager
 from db_schema import metadata, timestamps, staging
-from frames import TimeSeriesFrame
+from frames import make_time_series_frame
 
 
-class QuantDataCache:
+class DataCache:
     """Caches quantitative data from an API into the database after checking the latest timestamp.
 
     Skips API call if the latest timestamp is more than 5 minutes old."""
@@ -56,7 +56,7 @@ class QuantDataCache:
 
                 try:
                     self.to_ts_table(con, new_data)
-                    self.to_quant_data_table(con, new_data)
+                    self.to_time_series_table(con, new_data)
                     con.commit()
 
                 except SQLAlchemyError as e:
@@ -79,15 +79,15 @@ class QuantDataCache:
         col_names = result.keys()
         columns =  zip(*result.fetchall())
 
-        loc = {col_name: column for col_name, column in zip(col_names, columns)}
+        loc  = {col_name: column for col_name, column in zip(col_names, columns)}
 
-        return TimeSeriesFrame(loc, coin_id, currency_symbol)
+        return make_time_series_frame(loc, coin_id, currency_symbol)
 
     @staticmethod
-    def to_ts_table(connection, new_data: TimeSeriesFrame):
-        """Inserts data into timestamps table."""
-        coin_id = new_data.coin_id
-        currency_symbol = new_data.currency_symbol
+    def to_ts_table(connection, new_data: pd.DataFrame):
+        """Inserts data into the timestamps table."""
+        coin_id = new_data.attrs['coin_id']
+        currency_symbol = new_data.attrs['currency_symbol']
 
         df_to_insert = pd.DataFrame()
         df_to_insert['timestamp'] = new_data.timestamp
@@ -97,7 +97,7 @@ class QuantDataCache:
 
         connection.execute(stmt, df_to_insert.to_dict(orient='records'))
 
-    def to_quant_data_table(self, connection, new_data: TimeSeriesFrame):
+    def to_time_series_table(self, connection, new_data: pd.DataFrame):
         """Merges new data with ids from the timestamp table and inserts into the appropriate table."""
         stmt = staging.insert().prefix_with('OR REPLACE')
         connection.execute(stmt, new_data.to_dict(orient='records'))

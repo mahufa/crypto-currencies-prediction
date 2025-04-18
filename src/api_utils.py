@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 import pandas as pd
 import requests
 
-from cache import QuantDataCache
-from frames import TimeSeriesFrame
+from cache import DataCache
+from frames import make_time_series_frame
 
 PRECISION = 2
 DEFAULT_DAYS = 30
@@ -61,9 +61,9 @@ def get_sorted_by_mkt_cap(n=10, currency_symbol=DEFAULT_CURRENCY):
     return pd.DataFrame(data)[['id', 'symbol', 'name', 'market_cap', 'current_price']] if data else pd.DataFrame()
 
 
-@QuantDataCache('historical_data')
+@DataCache('historical_data')
 def get_historical_data(*, coin_id='bitcoin', currency_symbol=DEFAULT_CURRENCY, starting_timestamp=None):
-    """ Returns TimeSeriesFrame with historical data from day mathing
+    """ Returns DataFrame with historical data from day mathing
     starting_timestamp, or if it's None, from range of DEFAULT_DAYS.
 
     Frame columns:
@@ -80,20 +80,22 @@ def get_historical_data(*, coin_id='bitcoin', currency_symbol=DEFAULT_CURRENCY, 
     data = _fetch_data(url, params)
 
     if not data:
-        return TimeSeriesFrame(None, coin_id, currency_symbol)
+        return make_time_series_frame([], coin_id, currency_symbol)
 
-    return TimeSeriesFrame({
-        'timestamp': [ts for ts, _ in data['prices']],
-        'price': [price for _, price in data['prices']],
-        'market_cap': [cap for _, cap in data['market_caps']],
-        'total_volume': [vol for _, vol in data['total_volumes']]},
-        coin_id,
-        currency_symbol)
+    return make_time_series_frame(
+            {
+                    'timestamp': [ts for ts, _ in data['prices']],
+                    'price': [price for _, price in data['prices']],
+                    'market_cap': [cap for _, cap in data['market_caps']],
+                    'total_volume': [vol for _, vol in data['total_volumes']]
+            },
+            coin_id,
+            currency_symbol)
 
 
-@QuantDataCache("ohlc_data")
+@DataCache("ohlc_data")
 def get_ohlc_data(*, coin_id='bitcoin', currency_symbol=DEFAULT_CURRENCY, starting_timestamp=None):
-    """ Returns TimeSeriesFrame with OHLC data from day mathing
+    """ Returns DataFrame with OHLC data from day mathing
     starting_timestamp, or if it's None, from range of DEFAULT_DAYS.
 
     Frame columns:
@@ -115,15 +117,18 @@ def get_ohlc_data(*, coin_id='bitcoin', currency_symbol=DEFAULT_CURRENCY, starti
     data = _fetch_data(url, params)
 
     if not data:
-        return TimeSeriesFrame(None, coin_id, currency_symbol)
+        return make_time_series_frame([], coin_id, currency_symbol)
 
     timestamps, opens, highs, lows, closes = zip(*data)
-    return TimeSeriesFrame({
-        'timestamp': timestamps,
-        'open':     opens,
-        'high':     highs,
-        'low':      lows,
-        'close':    closes},
-        coin_id,
-        currency_symbol)
+
+    return make_time_series_frame(
+            {
+                    'timestamp': timestamps,
+                    'open':     opens,
+                    'high':     highs,
+                    'low':      lows,
+                    'close':    closes
+            },
+            coin_id,
+            currency_symbol)
 
