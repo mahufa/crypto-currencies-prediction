@@ -1,20 +1,13 @@
 from datetime import datetime, timedelta
 
 import pandas as pd
-import requests
-
+from http_client import get_json
 from cache import DataCache
 from frames import make_time_series_frame
 
 PRECISION = 2
 DEFAULT_DAYS = 30
 DEFAULT_CURRENCY = "usd"
-
-
-def _fetch_data(url: str, params: dict[str, any]=None):
-    response = requests.get(url, params=params, timeout=5)
-    response.raise_for_status()
-    return response.json()
 
 
 def _days_for_free_api(days: int) -> int:
@@ -25,7 +18,7 @@ def _days_for_free_api(days: int) -> int:
 def get_currencies() -> pd.Series:
     """ Returns Series with all available currencies, else if status code = 4xx or 5xx raises HTTPError. """
     url = "https://api.coingecko.com/api/v3/simple/supported_vs_currencies"
-    data = _fetch_data(url)
+    data = get_json(url)
 
     return pd.Series(data) if data else pd.Series()
 
@@ -38,7 +31,7 @@ def get_coins() -> pd.DataFrame:
 
      If status code = 4xx or 5xx raises HTTPError. """
     url = "https://api.coingecko.com/api/v3/coins/list"
-    data = _fetch_data(url)
+    data = get_json(url)
 
     return pd.DataFrame(data) if data else pd.DataFrame()
 
@@ -58,7 +51,7 @@ def get_sorted_by_mkt_cap(n: int=10, currency_symbol: str = DEFAULT_CURRENCY) ->
     params = {"vs_currency": currency_symbol,
               "per_page": n,
               "precision": PRECISION}
-    data = _fetch_data(url, params)
+    data = get_json(url, params)
 
     return pd.DataFrame(data)[['id', 'symbol', 'name', 'market_cap', 'current_price']] if data else pd.DataFrame()
 
@@ -82,7 +75,7 @@ def get_historical_data(coin_id: str = 'bitcoin',
               'precision': PRECISION,
               'from': starting_timestamp/1000,
               'to': datetime.now().timestamp()}
-    data = _fetch_data(url, params)
+    data = get_json(url, params)
 
     if not data:
         return make_time_series_frame([], coin_id, currency_symbol)
@@ -122,7 +115,7 @@ def get_ohlc_data(coin_id: str = 'bitcoin',
     params = {"vs_currency": currency_symbol,
               "precision": PRECISION,
               "days": adjusted_days}
-    data = _fetch_data(url, params)
+    data = get_json(url, params)
 
     if not data:
         return make_time_series_frame([], coin_id, currency_symbol)
