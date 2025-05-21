@@ -2,8 +2,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from frames import make_time_series_frame
-from project_utils import days_since_dt, days_for_free_api
+from project_utils import days_since_dt, days_for_free_api, make_time_series_frame
 from api_client.http_client import get
 from config import DEFAULT_CURRENCY, PRICE_PRECISION, DEFAULT_COIN
 
