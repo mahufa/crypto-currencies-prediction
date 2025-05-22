@@ -64,3 +64,17 @@ class CacheManager:
 
         stmt = self.table.insert().prefix_with('OR REPLACE')
         self.conn.execute(stmt, data_to_upsert)
+
+    def days_to_call(self, starting_dt: datetime | None) -> int:
+        last_cached_dt = self.last_dt()
+
+        if (starting_dt and last_cached_dt
+                or not starting_dt and last_cached_dt):
+            return (days_for_free_api(days_since_dt(last_cached_dt) if self.table== ohlc_data
+                                      else days_since_dt(last_cached_dt)))
+        elif starting_dt and not last_cached_dt:
+            return (days_for_free_api(days_since_dt(starting_dt) if self.table == ohlc_data
+                                      else days_since_dt(last_cached_dt)))
+        else:
+            return (days_for_free_api(DEFAULT_DAYS) if self.table == ohlc_data
+                    else DEFAULT_DAYS)
