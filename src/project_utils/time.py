@@ -38,3 +38,20 @@ def utc_n_min_ago(n: int) -> datetime:
 def utc_from_cached_ts(ts: int) -> datetime:
     """Returns the UTC datetime from the given timestamp."""
     return datetime.fromtimestamp(ts/1000, tz=timezone.utc)
+
+def days_to_call(starting_dt: datetime | None,
+                 last_cached_dt: datetime | None,
+                 is_ohlc: bool) -> int:
+    """Decide how many days of data to request:
+            1. If we've ever cached data, measure days since last_cached_dt.
+            2. Else if the caller provided a starting_dt, measure days since starting_dt.
+            3. Otherwise, fall back to DEFAULT_DAYS.
+
+        Then, if this is OHLC data, snap into CoinGecko’s allowed buckets."""
+    ref_dt = last_cached_dt or starting_dt
+    if ref_dt:
+        days = days_since_dt(ref_dt)
+    else:
+        days = DEFAULT_DAYS
+
+    return days_for_free_api(days) if is_ohlc else days

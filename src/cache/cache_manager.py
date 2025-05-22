@@ -51,7 +51,7 @@ class CacheManager:
         rows = q_result.fetchall()
         return [{col : val for col, val in zip(cols, row)} for row in rows]
 
-    def normalize_data(self, raw_data: dict | list) -> list[dict]:
+    def _normalize_data(self, raw_data: dict | list) -> list[dict]:
         if self.table is historical_data:
             return parse_historical(raw_data)
         elif self.table is ohlc_data:
@@ -59,19 +59,11 @@ class CacheManager:
         else:
             raise RuntimeError(f"No parser for table {self.table.name!r}")
 
-    def upsert(self, normalized_data: dict | list):
+    def upsert(self, raw_data: dict | list):
+        normalized_data = self._normalize_data(raw_data)
         data_to_upsert = [{'coin_id': self.coin_id,
                            'currency_symbol': self.currency_symbol,
                            **row} for row in normalized_data]
 
         stmt = self.table.insert().prefix_with('OR REPLACE')
         self.conn.execute(stmt, data_to_upsert)
-
-    def days_to_call(self, starting_dt: datetime | None) -> int:
-        ref_dt = self.last_dt() or starting_dt
-        if ref_dt:
-            days = days_since_dt(ref_dt)
-        else:
-            days = DEFAULT_DAYS
-
-        return days_for_free_api(days) if self.table is ohlc_data else days

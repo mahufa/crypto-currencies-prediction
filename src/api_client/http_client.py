@@ -5,6 +5,7 @@ import requests
 
 from cache import CacheManager
 from config import PRICE_PRECISION
+from project_utils.time import days_to_call
 
 
 def get(url: str, params: dict[str, any] = None) -> dict:
@@ -20,14 +21,15 @@ def get_time_series(url: str,
                     table_name: str) -> dict | Any | None:
 
     with (CacheManager(coin_id, currency_symbol, table_name) as cache):
-        days = cache.days_to_call(starting_dt)
+        days = days_to_call(starting_dt,
+                            cache.last_dt(),
+                            is_ohlc = table_name=='ohlc_data')
         if days != 0:
             params = {"vs_currency": currency_symbol,
                       "precision": PRICE_PRECISION,
                       "days": days}
 
-            data = get(url, params)
-            normal_data = cache.normalize_data(data)
-            cache.upsert(normal_data)
+            raw_data = get(url, params)
+            cache.upsert(raw_data)
 
         return cache.fetch_local()
