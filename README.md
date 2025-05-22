@@ -6,8 +6,8 @@ This project is a Python-based tool that retrieves, caches, and processes real-t
 ## Features
 - Retrieves live cryptocurrency market data via the CoinGecko API  
 - Implements a custom caching mechanism to reduce redundant API calls  
+- Stores data locally in an SQLite database using SQLAlchemy
 - Processes and cleans data using Pandas  
-- Stores data locally in an SQLite database using SQLAlchemy  
 - Designed for future integration of data visualizations
 
 ## Technologies
@@ -43,8 +43,8 @@ This project is a Python-based tool that retrieves, caches, and processes real-t
 
 ### Future Enhancements
 
-- Develop comprehensive data visualizations with libraries like Matplotlib or Seaborn
-- Improve error handling and extend caching functionality
+- Develop comprehensive data visualizations with libraries like Matplotlib
+- Improve error handling
 
 ---
 
