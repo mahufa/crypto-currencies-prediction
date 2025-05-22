@@ -5,7 +5,7 @@ import requests
 
 from cache import CacheManager
 from config import DEFAULT_DAYS
-from project_utils import utc_from_cached_ts, days_since_dt, days_for_free_api
+from project_utils import days_since_dt, days_for_free_api
 
 
 def get_json(url: str, params: dict[str, any] = None):
@@ -31,8 +31,7 @@ def get(url: str,
 
             return normalized_new_data
 
-        last_cached_ts = cache.last_ts()
-        last_cached_dt = utc_from_cached_ts(last_cached_ts)
+        last_cached_dt = cache.last_dt()
         if not starting_dt:
             days_from_last_cached = (days_for_free_api(days_since_dt(last_cached_dt))
                                      if table_name == 'ohlc_data'
