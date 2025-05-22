@@ -39,6 +39,7 @@ def utc_from_cached_ts(ts: int) -> datetime:
     """Returns the UTC datetime from the given timestamp."""
     return datetime.fromtimestamp(ts/1000, tz=timezone.utc)
 
+
 def days_to_call(starting_dt: datetime | None,
                  last_cached_dt: datetime | None,
                  is_ohlc: bool) -> int:

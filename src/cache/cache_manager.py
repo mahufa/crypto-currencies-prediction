@@ -5,8 +5,7 @@ from sqlalchemy import select, func
 from cache.db_manager import get_connection
 from cache.db_schema import metadata, historical_data, ohlc_data
 from cache.parsers import parse_historical, parse_ohlc
-from config import DEFAULT_DAYS
-from project_utils import utc_from_cached_ts, days_for_free_api, days_since_dt
+from project_utils import utc_from_cached_ts
 
 
 class CacheManager:
@@ -51,6 +50,16 @@ class CacheManager:
         rows = q_result.fetchall()
         return [{col : val for col, val in zip(cols, row)} for row in rows]
 
+    def upsert(self, raw_data: dict | list):
+        normalized_data = self._normalize_data(raw_data)
+
+        data_to_upsert = [{'coin_id': self.coin_id,
+                           'currency_symbol': self.currency_symbol,
+                           **row} for row in normalized_data]
+
+        stmt = self.table.insert().prefix_with('OR REPLACE')
+        self.conn.execute(stmt, data_to_upsert)
+
     def _normalize_data(self, raw_data: dict | list) -> list[dict]:
         if self.table is historical_data:
             return parse_historical(raw_data)
@@ -58,12 +67,3 @@ class CacheManager:
             return parse_ohlc(raw_data)
         else:
             raise RuntimeError(f"No parser for table {self.table.name!r}")
-
-    def upsert(self, raw_data: dict | list):
-        normalized_data = self._normalize_data(raw_data)
-        data_to_upsert = [{'coin_id': self.coin_id,
-                           'currency_symbol': self.currency_symbol,
-                           **row} for row in normalized_data]
-
-        stmt = self.table.insert().prefix_with('OR REPLACE')
-        self.conn.execute(stmt, data_to_upsert)
