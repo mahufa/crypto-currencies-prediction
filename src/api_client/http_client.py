@@ -4,46 +4,31 @@ from typing import Any
 import requests
 
 from cache import CacheManager
-from config import DEFAULT_DAYS
+from config import DEFAULT_DAYS, PRICE_PRECISION
 from project_utils import days_since_dt, days_for_free_api
 
 
-def get_json(url: str, params: dict[str, any] = None):
+def get(url: str, params: dict[str, any] = None) -> dict:
     response = requests.get(url, params=params, timeout=5)
     response.raise_for_status()
     return response.json()
 
 
-def get(url: str,
-        params: dict[str, any] = None,
-        coin_id: str = None,
-        starting_dt: datetime = None,
-        table_name: str = None) -> dict | Any | None:
-    if not table_name:
-        get_json(url, params)
+def get_time_series(url: str,
+                    coin_id: str,
+                    currency_symbol: str,
+                    starting_dt: datetime | None,
+                    table_name: str) -> dict | Any | None:
 
-    with CacheManager(coin_id, params.get('vs_currency'), table_name) as cache:
-        local_data = cache.fetch_local()
+    with (CacheManager(coin_id, currency_symbol, table_name) as cache):
+        days = cache.days_to_call(starting_dt)
+        if days != 0:
+            params = {"vs_currency": currency_symbol,
+                      "precision": PRICE_PRECISION,
+                      "days": days}
 
-        if not local_data:
-            normalized_new_data = cache.normalize_data(get_json(url, params))
-            cache.upsert(normalized_new_data)
+            data = get(url, params)
+            normal_data = cache.normalize_data(data)
+            cache.upsert(normal_data)
 
-            return normalized_new_data
-
-        last_cached_dt = cache.last_dt()
-        if not starting_dt:
-            days_from_last_cached = (days_for_free_api(days_since_dt(last_cached_dt))
-                                     if table_name == 'ohlc_data'
-                                     else days_since_dt(last_cached_dt))
-            days = days_from_last_cached if days_from_last_cached < DEFAULT_DAYS else DEFAULT_DAYS
-        elif starting_dt < last_cached_dt:
-            days = (days_for_free_api(days_since_dt(last_cached_dt)) if table_name == 'ohlc_data'
-                    else days_since_dt(last_cached_dt))
-        params['days'] = days
-
-        normalized_new_data = cache.normalize_data(get_json(url, params))
-        cache.upsert(normalized_new_data)
-
-        print()
-        return local_data + normalized_new_data
+        return cache.fetch_local()

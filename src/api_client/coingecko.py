@@ -3,7 +3,7 @@ from datetime import datetime
 import pandas as pd
 
 from project_utils import days_since_dt, days_for_free_api, make_time_series_frame
-from api_client.http_client import get
+from api_client.http_client import get_time_series, get
 from config import DEFAULT_CURRENCY, PRICE_PRECISION, DEFAULT_COIN
 
 
@@ -56,17 +56,18 @@ def get_historical_data(coin_id: str = DEFAULT_COIN,
     """ Returns DataFrame with historical data from day mathing
     starting_dt, or if it's None, from range of DEFAULT_DAYS.
 
+     Data granularity is automatic according to Coingecko free API:
+        1 day from current time = 5-minutely data
+        2 - 90 days from current time = hourly data
+        above 90 days from current time = daily data (00:00 UTC)
+
     Frame columns:
         'timestamp' | 'price' | 'market_cap' | 'total_volume'
 
      If status code = 4xx or 5xx raises HTTPError. """
-    days = days_since_dt(starting_dt)
 
     url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
-    params = {'vs_currency': currency_symbol,
-              'precision': PRICE_PRECISION,
-              'days': days}
-    data = get(url, params, coin_id, starting_dt, 'historical_data')
+    data = get_time_series(url, coin_id, currency_symbol, starting_dt, 'historical_data')
 
     return make_time_series_frame(data, coin_id, currency_symbol)
 
@@ -76,18 +77,20 @@ def get_ohlc_data(coin_id: str = DEFAULT_COIN,
                   starting_dt: datetime=None
                   ) -> pd.DataFrame:
     """ Returns a DataFrame with OHLC data from the day matching
-    starting_dt, or if it's None, from the range of DEFAULT_DAYS.
+    starting_dt, or if it's None, from the range of DEFAULT_DAYS
+    adjusted to supported by CoinGecko free tier limits.
+
+    Data granularity (candle's body) is automatic according to Coingecko free API:
+        1 - 2 days: 30 minutes
+        3 - 30 days: 4 hours
+        31 days and beyond: 4 days
 
     Frame columns:
         timestamp | open | high | low | close
 
     If status code = 4xx or 5xx raises HTTPError. """
-    days = days_since_dt(starting_dt)
-    adjusted_days = days_for_free_api(days)
 
     url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc"
-    params = {"vs_currency": currency_symbol,
-              "precision": PRICE_PRECISION,
-              "days": adjusted_days}
-    data = get(url, params, coin_id, starting_dt, 'ohlc_data')
+    data = get_time_series(url, coin_id, currency_symbol, starting_dt, 'ohlc_data')
+
     return make_time_series_frame(data, coin_id, currency_symbol)

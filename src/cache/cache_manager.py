@@ -5,7 +5,8 @@ from sqlalchemy import select, func
 from cache.db_manager import get_connection
 from cache.db_schema import metadata, historical_data, ohlc_data
 from cache.parsers import parse_historical, parse_ohlc
-from project_utils import utc_from_cached_ts
+from config import DEFAULT_DAYS
+from project_utils import utc_from_cached_ts, days_for_free_api, days_since_dt
 
 
 class CacheManager:
@@ -29,13 +30,13 @@ class CacheManager:
             self.trans.commit()
         self.conn.close()
 
-    def last_dt(self) -> datetime:
+    def last_dt(self) -> datetime | None:
         q = (select(func.max(self.table.c.timestamp))
              .select_from(self.table)
              .where(self.table.c.coin_id == self.coin_id)
              .where(self.table.c.currency_symbol == self.currency_symbol))
         last_ts = self.conn.execute(q).scalar()
-        return utc_from_cached_ts(last_ts)
+        return utc_from_cached_ts(last_ts) if last_ts else None
 
     def fetch_local(self) -> list[dict]:
         q = (select(*[col for col in self.table.c if col.name not in ['coin_id', 'currency_symbol']])
