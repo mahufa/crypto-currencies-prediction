@@ -27,7 +27,10 @@ class CacheManager:
         self.conn.close()
 
     def last_ts(self):
-        q = (select(func.max(self.table.c.timestamp)).select_from(self.table))
+        q = (select(func.max(self.table.c.timestamp))
+             .select_from(self.table)
+             .where(self.table.c.coin_id == self.coin_id)
+             .where(self.table.c.currency_symbol == self.currency_symbol))
         return self.conn.execute(q).scalar()
 
     def fetch_local(self) -> list[dict]:
