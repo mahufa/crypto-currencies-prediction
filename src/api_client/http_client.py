@@ -4,8 +4,7 @@ from typing import Any
 import requests
 
 from cache import CacheManager
-from config import DEFAULT_DAYS, PRICE_PRECISION
-from project_utils import days_since_dt, days_for_free_api
+from config import PRICE_PRECISION
 
 
 def get(url: str, params: dict[str, any] = None) -> dict:

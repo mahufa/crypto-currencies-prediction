@@ -37,19 +37,15 @@ class CacheManager:
 
     def last_dt(self) -> datetime | None:
         q = (select(func.max(self.table.c.timestamp))
-             .select_from(self.table)
-             .where(self.table.c.coin_id == self.coin_id)
-             .where(self.table.c.currency_symbol == self.currency_symbol))
-        last_ts = self.conn.execute(q).scalar()
+             .select_from(self.table))
+        last_ts = self.conn.execute(self._base_filter(q)).scalar()
         return utc_from_cached_ts(last_ts) if last_ts else None
 
     def fetch_local(self) -> list[dict]:
         q = (select(*[col for col in self.table.c if col.name not in ['coin_id', 'currency_symbol']])
-                 .select_from(self.table)
-                 .where(self.table.c.coin_id == self.coin_id)
-                 .where(self.table.c.currency_symbol == self.currency_symbol))
+                 .select_from(self.table))
 
-        q_result =  self.conn.execute(q)
+        q_result =  self.conn.execute(self._base_filter(q))
 
         cols = q_result.keys()
         rows = q_result.fetchall()
@@ -72,15 +68,10 @@ class CacheManager:
         self.conn.execute(stmt, data_to_upsert)
 
     def days_to_call(self, starting_dt: datetime | None) -> int:
-        last_cached_dt = self.last_dt()
-
-        if (starting_dt and last_cached_dt
-                or not starting_dt and last_cached_dt):
-            return (days_for_free_api(days_since_dt(last_cached_dt) if self.table== ohlc_data
-                                      else days_since_dt(last_cached_dt)))
-        elif starting_dt and not last_cached_dt:
-            return (days_for_free_api(days_since_dt(starting_dt) if self.table == ohlc_data
-                                      else days_since_dt(last_cached_dt)))
+        ref_dt = self.last_dt() or starting_dt
+        if ref_dt:
+            days = days_since_dt(ref_dt)
         else:
-            return (days_for_free_api(DEFAULT_DAYS) if self.table == ohlc_data
-                    else DEFAULT_DAYS)
+            days = DEFAULT_DAYS
+
+        return days_for_free_api(days) if self.table is ohlc_data else days
